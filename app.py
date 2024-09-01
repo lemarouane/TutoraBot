@@ -14,6 +14,13 @@ load_dotenv()
 # Get API key from environment variable
 openai_key = os.getenv('OPENAI_API_KEY')
 
+# Define the directory for pre-existing documents
+PRE_EXISTING_DOCS_DIR = 'pre_existing_docs'
+
+# Ensure the directory exists
+os.makedirs(PRE_EXISTING_DOCS_DIR, exist_ok=True)
+
+# Initialize Streamlit
 st.set_page_config(
     page_title="Outil QA Éducatif | TutoBot",
     page_icon="📚"
@@ -33,22 +40,28 @@ Imaginez avoir un assistant virtuel qui vous aide à :
 - Extraire les points clés de textes longs.
 - Identifier et clarifier toute section confuse ou contradictoire.
 - Obtenir des réponses à des questions spécifiques liées à votre contenu.
-
-
 ''')
-
 
 pdf_file = st.file_uploader("Téléchargez un document PDF", type=["pdf"])
 
 if pdf_file is not None:
-    # Charger et traiter le document PDF
+    # Handle the uploaded document
     with tempfile.NamedTemporaryFile(delete=False) as temp_file:
         temp_file.write(pdf_file.read())
         temp_file.seek(0)
         loader = PyPDFLoader(temp_file.name)
         documents = loader.load()
+else:
+    # Load documents from the pre-existing directory
+    documents = []
+    for filename in os.listdir(PRE_EXISTING_DOCS_DIR):
+        file_path = os.path.join(PRE_EXISTING_DOCS_DIR, filename)
+        if os.path.isfile(file_path) and file_path.lower().endswith('.pdf'):
+            loader = PyPDFLoader(file_path)
+            documents.extend(loader.load())
 
-    # Initialiser les composants LangChain
+if documents:
+    # Initialize LangChain components
     embeddings = OpenAIEmbeddings(api_key=openai_key)
     vector_store = DocArrayInMemorySearch.from_documents(documents, embeddings)
     qa_chain = RetrievalQA.from_chain_type(
@@ -57,12 +70,12 @@ if pdf_file is not None:
         retriever=vector_store.as_retriever()
     )
 
-    # Formulaire de question
-    with st.form("basic_qa"):
-        query = st.text_input("Posez une question concernant votre document :")
-        submit_button = st.form_submit_button("Envoyer")
+    # Input box for user queries
+    query = st.text_input("Posez votre question :")
 
-        if submit_button and query:
-            response = qa_chain.run(query)
-            st.write("Réponse :")
-            st.write(response)
+    if query:
+        response = qa_chain.run(query)
+        st.write("### Réponse du Chatbot")
+        st.write(response)
+else:
+    st.write("Aucun document à traiter. Veuillez télécharger un document ou assurez-vous qu'il y a des documents dans le répertoire pré-existant.")
